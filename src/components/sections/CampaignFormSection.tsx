@@ -9,17 +9,20 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { insertUserInterest } from "@/integrations/supabase/mutations";
 import { showSuccess, showError } from "@/utils/toast";
 import { Loader2 } from "lucide-react";
-import React from "react";
+import React, { useEffect } from "react";
+
+const INTEREST_CATEGORIES = ["Edukasi", "Energi Terbarukan", "Produk"] as const;
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Nama harus diisi minimal 2 karakter." }),
   email: z.string().email({ message: "Format email tidak valid." }),
-  interest_category: z.enum(["Edukasi", "Energi Terbarukan", "Produk"], {
+  interest_category: z.enum(INTEREST_CATEGORIES, {
     required_error: "Pilih kategori minat.",
   }),
 });
 
 type CampaignFormValues = z.infer<typeof formSchema>;
+type InterestCategory = CampaignFormValues["interest_category"];
 
 const CampaignFormSection = () => {
   const form = useForm<CampaignFormValues>({
@@ -33,12 +36,34 @@ const CampaignFormSection = () => {
 
   const [isLoading, setIsLoading] = React.useState(false);
 
+  // Effect to handle autofill from Education cards
+  useEffect(() => {
+    const handleAutofill = (event: Event) => {
+      const customEvent = event as CustomEvent<InterestCategory>;
+      const category = customEvent.detail;
+      
+      if (category && INTEREST_CATEGORIES.includes(category)) {
+        form.setValue("interest_category", category, { shouldValidate: true });
+      }
+    };
+
+    window.addEventListener('autofill-interest', handleAutofill as EventListener);
+    
+    return () => {
+      window.removeEventListener('autofill-interest', handleAutofill as EventListener);
+    };
+  }, [form]);
+
   const onSubmit = async (values: CampaignFormValues) => {
     setIsLoading(true);
     try {
       await insertUserInterest(values);
       showSuccess("Terima kasih! Anda telah terdaftar dalam kampanye kami.");
-      form.reset();
+      form.reset({
+        name: "",
+        email: "",
+        interest_category: undefined,
+      });
     } catch (error) {
       showError("Gagal mendaftar. Silakan coba lagi.");
     } finally {
@@ -90,7 +115,7 @@ const CampaignFormSection = () => {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Kategori Minat</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Pilih kategori minat Anda" />
